@@ -5,6 +5,8 @@
 Oasis.js is a pleasant API for safe communication with untrusted code in
 sandboxed iframes.
 
+# Quick Start Example
+
 For example, imagine we are using a third-party profile viewer to
 display information about a user. We only want to expose the bare
 minimum required to use the widget, without giving it access to all of
@@ -64,6 +66,28 @@ or a third-party's domain):
   </body>
 </html>
 ```
+
+# Overview
+
+Traditionally, developers wishing to embed "arbitrary" JavaScript in their application
+have faced a choice: they can directly embed it, running all the risks of malicious code
+and style bleeding; or they can embed it in a nested iframe and leave it to its own
+devices with the only communication between them being through shared backend servers.
+
+Oasis addresses this by allowing two independent JavaScript containers (the "application"
+and the "widget" in the above example) to communicate using messages.  On modern browsers,
+this is supported internally through the MessageChannel API.  Oasis offers the benefits of
+a clean, comprehensible interface and consistent polyfilling across browsers.
+
+A **sandbox** is a nested environment which is fundamentally independent from its parent
+(i.e. the only connection is through Oasis).  A sandbox can either be creating with a
+visual aspect in an iframe and added to the DOM, or it may be created invisibly in a
+web worker.
+
+In order for a sandbox to function, it must download some code from somewhere; typically
+this will be a complete, fresh HTML document with `<head>` and `<body>` portions.  Since
+no code or styling is shared, this document is responsible for linking to and installing
+all the relevant code.
 
 # API
 
