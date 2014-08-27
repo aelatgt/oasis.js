@@ -19,10 +19,12 @@ Here is what your application would look like:
 
 <html>
   <head>
-    <script src="http://example.com/oasis.js.html"></script>
+    <script src="http://example.com/jquery.js"></script>
+    <script src="http://example.com/oasis.js"></script>
   </head>
   <body>
     <script>
+      var oasis = new Oasis();
       var sandbox = oasis.createSandbox({
         url: 'http://example.com/profile_viewer.html',
         type: 'html',
@@ -50,13 +52,14 @@ or a third-party's domain):
 <html>
   <head>
     <script src="http://example.com/jquery.js"></script>
-    <script src="http://example.com/oasis.js.html"></script>
+    <script src="http://example.com/oasis.js"></script>
   </head>
   <body>
     <div>
       <p>Email: <span id="email"><img src="loading.png"></span></p>
     </div>
     <script>
+      var oasis = new Oasis();
       oasis.connect('account').then(function(port) {
         port.request('profile').then(function(profile) {
           $("#email").html(profile.email);
@@ -87,9 +90,150 @@ web worker.
 In order for a sandbox to function, it must download some code from somewhere; typically
 this will be a complete, fresh HTML document with `<head>` and `<body>` portions.  Since
 no code or styling is shared, this document is responsible for linking to and installing
-all the relevant code.
+all the relevant code.  In order to support this, any sandbox must be given a `url` parameter
+when it is created.
 
-# API
+In order for the two environments to communicate, there must be one or more channels for
+communication.  When the sandbox is created, the creating environment must pass in an array
+of "capability names", each name representing one **capability** that can be used for communication.
+
+In general, these capabilities will be wrapped in **consumer**/**service** pairs and the consumers
+and services can also be specified during sandbox creation.
+
+# Building up the example above
+
+Let's go though the code to produce the example presented above.
+
+The basic outline of the HTML is fairly vanilla and should be obvious (if not, this
+may not be the page for you).
+
+Application (say at http://example.com/app.html)
+
+```html
+<!doctype html>
+
+<html>
+  <head>
+    <script src="http://example.com/jquery.js"></script>
+    <script src="http://example.com/oasis.js"></script>
+  </head>
+  <body>
+    <script>
+    </script>
+  </body>
+</html>
+```
+
+Widget (say at http://example.com/profile_viewer.html):
+
+```html
+<!doctype html>
+
+<html>
+  <head>
+    <script src="http://example.com/jquery.js"></script>
+    <script src="http://example.com/oasis.js"></script>
+  </head>
+  <body>
+    <div>
+    </div>
+    <script>
+    </script>
+  </body>
+</html>
+```
+
+Basically, both files load in jquery and oasis and have room to put other code.
+
+## Instantiate Oasis
+
+The `oasis.js` file defines the `Oasis` class, and the first thing that we need
+to do on both sides is to create an instance:
+
+```
+      var oasis = new Oasis();
+```
+
+## Create the Sandbox
+
+Inside the application, we then need to create a sandbox object.  It needs a
+`url` pointing to where the widget can be found.  The type `html` says that the
+specified URL points to an HTML resource which should be downloaded.
+
+The capabilities array specifies the names of a set of **capabilities** or
+services for which communication channels can be established between the two
+environments.
+
+```
+      var sandbox = oasis.createSandbox({
+        url: 'http://example.com/profile_viewer.html',
+        type: 'html',
+        capabilities: [ 'account' ]
+      });
+```
+
+The name "account" here is neither magic nor random.  This is the name we have chosen
+(as application developers) to give to the capability we want to provide between the two
+environments.
+
+We can now set up a `port` through which we will be able to talk to the sandbox.
+
+```
+      sandbox.connect('account').then(function(port) {
+      });
+```
+
+Note that although everything may appear to be live here, nothing will happen until both
+ends of the communication channel have been established.  That requires the sandbox to
+do its half of the handshaking.  Any messages that are sent _before_ the connection is
+completed will be queued and delivered upon connection.  It is the application developer's
+responsibility to make sure that either their code is resilient in the face of large backlogs and
+multiple messages being delivered simultaneously or they stop that happening through an
+additional handshaking phase.
+
+## Create the Oasis Connection in the Sandbox
+
+From within the sandbox, it is necessary to connect back to the same capability
+defined above.  Because this is an asynchronous operation, we use promises to obtain
+the actual connection (called a `port`).
+
+The code we want to write can then be contained within this block.
+
+```
+      oasis.connect('account').then(function(port) {
+      });
+```
+
+Note that here we use `oasis.connect` directly, rather than having a separate handle
+as we did on the application side.  This enables us to talk to the "parent" of the sandbox
+rather than talking to a nested sandbox.
+
+Once both `connect` operations have completed and called into the callback functions,
+the connection will have been established and the communications can begin.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## Creating Sandboxes
 
@@ -155,6 +299,8 @@ document.body.appendChild(sandbox.el);
 But they can be placed anywhere in the DOM.  Please note that once in the DOM
 the sandboxes should not be moved: iframes moved within documents are reloaded
 by the browser.
+
+# API
 
 ## Connecting to Ports Directly
 
