@@ -3544,9 +3544,12 @@ define("oasis/iframe_adapter",
         // rendering-specific code
         if (options.width) {
           iframe.width = options.width;
-        } else if (options.height) {
+        } else 
+          iframe.width = "100%";
+        if (options.height) {
           iframe.height = options.height;
-        }
+        } else
+          iframe.height = "100%";
 
         // Error handling inside the iFrame
         iframe.errorHandler = function(event) {
