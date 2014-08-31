@@ -1,6 +1,4 @@
-import IframeAdapter from "oasis/iframe_adapter";
-import WebworkerAdapter from "oasis/webworker_adapter";
-import InlineAdapter from "oasis/inline_adapter";
+import Oasis from "oasis";
 import { a_forEach, o_create } from "oasis/shims";
 import { _addEventListener } from "test/helpers/shims";
 
@@ -19,10 +17,6 @@ function iframeOptions(options) {
 function webworkerOptions(options) {
   if (options.adapter === undefined) { options.adapter = Oasis.adapters.webworker; }
   options.url = options.url.replace(/\.js/, '.worker.js');
-}
-
-function inlineOptions(options) {
-  if (options.adapter === undefined) { options.adapter = Oasis.adapters.inline; }
 }
 
 function createSandbox(options) {
@@ -49,11 +43,6 @@ function createWebworkerSandbox(options) {
   return sandbox;
 }
 
-function createInlineSandbox(options) {
-  inlineOptions(options);
-  return createSandbox(options);
-}
-
 function registerIframe(options) {
   iframeOptions(options);
   window.oasis.register(options);
@@ -61,11 +50,6 @@ function registerIframe(options) {
 
 function registerWebworker(options) {
   webworkerOptions(options);
-  window.oasis.register(options);
-}
-
-function registerInline(options) {
-  inlineOptions(options);
   window.oasis.register(options);
 }
 
@@ -86,14 +70,6 @@ function webworkerOasis() {
     configure: configure,
     register: registerWebworker,
     createSandbox: createWebworkerSandbox
-  };
-}
-
-function inlineOasis() {
-  return {
-    configure: configure,
-    register: registerInline,
-    createSandbox: createInlineSandbox
   };
 }
 
@@ -125,12 +101,6 @@ export function commonTests(moduleName, testsFn) {
     });
     testsFn(webworkerOasis(), 'webworker');
   }
-
-  module('inline:    ' + moduleName, {
-    setup: setup,
-    teardown: teardown
-  });
-  testsFn(inlineOasis(), 'inline');
 }
 
 export function isSandboxAttributeSupported() {
