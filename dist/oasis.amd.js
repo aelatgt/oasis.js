@@ -467,8 +467,8 @@ define("oasis/events",
     return Events;
   });
 define("oasis/iframe_adapter",
-  ["oasis/util","oasis/shims","rsvp","oasis/logger","oasis/base_adapter"],
-  function(__dependency1__, __dependency2__, RSVP, Logger, BaseAdapter) {
+  ["oasis/util","oasis/shims","oasis/uuid","rsvp","oasis/logger","oasis/base_adapter"],
+  function(__dependency1__, __dependency2__, UUID, RSVP, Logger, BaseAdapter) {
     "use strict";
     var assert = __dependency1__.assert;
     var extend = __dependency1__.extend;
@@ -476,7 +476,7 @@ define("oasis/iframe_adapter",
     var addEventListener = __dependency2__.addEventListener;
     var removeEventListener = __dependency2__.removeEventListener;
     var a_map = __dependency2__.a_map;
-    /*global Window, UUID */
+    /*global Window */
 
 
 
@@ -615,6 +615,7 @@ define("oasis/iframe_adapter",
         sandbox.el = iframe;
 
         iframe.oasisLoadHandler = function (event) {
+          Logger.log("OasisLoadHandler has seen event" + event);
           if( event.data !== sandbox.adapter.oasisLoadedMessage ) {return;}
           try {
             // verify this message came from the expected sandbox; try/catch
@@ -695,6 +696,107 @@ define("oasis/iframe_adapter",
 
 
     return IframeAdapter;
+  });
+define("oasis/inline_adapter",
+  ["oasis/util","oasis/config","oasis/shims","oasis/xhr","rsvp","oasis/logger","oasis/base_adapter"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, RSVP, Logger, BaseAdapter) {
+    "use strict";
+    var assert = __dependency1__.assert;
+    var extend = __dependency1__.extend;
+    var noop = __dependency1__.noop;
+    var configuration = __dependency2__.configuration;
+    var a_forEach = __dependency3__.a_forEach;
+    var a_map = __dependency3__.a_map;
+    var xhr = __dependency4__.xhr;
+    /*global self, postMessage, importScripts */
+
+
+
+    var InlineAdapter = extend(BaseAdapter, {
+      //-------------------------------------------------------------------------
+      // Environment API
+
+      initializeSandbox: function(sandbox) {
+        sandbox.el = document.createElement('div');
+
+        var oasis = sandbox.sandboxedOasis = new Oasis();
+        sandbox.sandboxedOasis.sandbox = sandbox;
+        RSVP.async(function () {
+          sandbox.createAndTransferCapabilities();
+        });
+      },
+ 
+      startSandbox: function(sandbox) {
+        var body = document.body || document.documentElement.getElementsByTagName('body')[0];
+        body.appendChild(sandbox.el);
+      },
+
+      terminateSandbox: function(sandbox) {
+        var el = sandbox.el;
+
+        if (el.parentNode) {
+          Logger.log("Terminating sandbox ", sandbox.el.name);
+          el.parentNode.removeChild(el);
+        }
+
+        sandbox.el = null;
+      },
+
+      connectPorts: function(sandbox, ports) {
+        var rawPorts = a_map.call(ports, function(oasisPort){ return oasisPort.port; }),
+            message = this.createInitializationMessage(sandbox),
+            event = { data: message, ports: rawPorts };
+
+        // Normally `connectSandbox` is called in autoinitialization, but there
+        // isn't a real sandbox here.
+        this.connectSandbox(sandbox.sandboxedOasis, event);
+      },
+
+      fetchResource: function (url, oasis) {
+        var adapter = this;
+
+        return xhr(url, {
+          dataType: 'text'
+        }, oasis).then(function (code) {
+          return adapter.wrapResource(code);
+        })['catch'](RSVP.rethrow);
+      },
+
+      wrapResource: function (code) {
+        return new Function("oasis", code);
+      },
+
+      //-------------------------------------------------------------------------
+      // Sandbox API
+
+      connectSandbox: function(oasis, pseudoEvent) {
+        return this.initializeOasisSandbox(pseudoEvent, oasis);
+      },
+
+      oasisLoaded: noop,
+
+      didConnect: function(oasis) {
+        var adapter = this;
+
+        return oasis.sandbox._waitForLoadDeferred().resolve(loadSandboxJS()['catch'](RSVP.rethrow));
+
+        function applySandboxJS(sandboxFn) {
+          Logger.log("sandbox: inline sandbox initialized");
+          sandboxFn(oasis);
+          return oasis.sandbox;
+        }
+
+        function loadSandboxJS() {
+          return new RSVP.Promise(function (resolve, reject) {
+            resolve(adapter.fetchResource(oasis.sandbox.options.url, oasis).
+              then(applySandboxJS));
+          });
+        }
+      },
+    });
+
+
+    return InlineAdapter;
   });
 define("oasis/logger",
   [],
@@ -1035,8 +1137,8 @@ define("oasis/message_channel",
     __exports__.PostMessagePort = PostMessagePort;
   });
 define("oasis/sandbox",
-  ["oasis/util","oasis/shims","oasis/message_channel","rsvp","oasis/logger"],
-  function(__dependency1__, __dependency2__, __dependency3__, RSVP, Logger) {
+  ["oasis/util","oasis/shims","oasis/message_channel","rsvp","oasis/logger","oasis/iframe_adapter"],
+  function(__dependency1__, __dependency2__, __dependency3__, RSVP, Logger, IframeAdapter) {
     "use strict";
     var assert = __dependency1__.assert;
     var uniq = __dependency1__.uniq;
@@ -1072,7 +1174,7 @@ define("oasis/sandbox",
 
       pkg = pkg || {};
 
-      this.adapter = options.adapter;
+      this.adapter = options.adapter || new IframeAdapter();
 
       this._capabilitiesToConnect = this._filterCapabilities(capabilities);
       this.envPortDefereds = {};
@@ -1097,6 +1199,7 @@ define("oasis/sandbox",
       },
 
       connect: function(capability) {
+        Logger.log("Connect called for " + capability);
         var portPromise = this.envPortDefereds[capability].promise;
 
         assert(portPromise, "Connect was called on '" + capability + "' but no such capability was registered.");
@@ -1116,12 +1219,14 @@ define("oasis/sandbox",
 
       promisePorts: function () {
         a_forEach.call(this._capabilitiesToConnect, function(capability) {
+          Logger.log("Promising port for " + capability);
           this.envPortDefereds[capability] = RSVP.defer();
           this.sandboxPortDefereds[capability] = RSVP.defer();
         }, this);
       },
 
       createChannels: function () {
+        Logger.log("Creating channels for " + this._capabilitiesToConnect);
         var sandbox = this,
             services = this.options.services || {},
             channels = this.channels;
@@ -1772,6 +1877,67 @@ define("oasis/util",
     __exports__.uniq = uniq;
     __exports__.reverseMerge = reverseMerge;
   });
+define("oasis/uuid",
+  [],
+  function() {
+    "use strict";
+    /**
+     * UUID.core.js: The minimal subset of the RFC-compliant UUID generator UUID.js.
+     *
+     * @fileOverview
+     * @author  LiosK
+     * @version core-1.0
+     * @license The MIT License: Copyright (c) 2012 LiosK.
+     */
+
+    /** @constructor */
+    function UUID() {}
+
+    /**
+     * The simplest function to get an UUID string.
+     * @returns {string} A version 4 UUID string.
+     */
+    UUID.generate = function() {
+      var rand = UUID._gri, hex = UUID._ha;
+      return  hex(rand(32), 8)          // time_low
+            + "-"
+            + hex(rand(16), 4)          // time_mid
+            + "-"
+            + hex(0x4000 | rand(12), 4) // time_hi_and_version
+            + "-"
+            + hex(0x8000 | rand(14), 4) // clock_seq_hi_and_reserved clock_seq_low
+            + "-"
+            + hex(rand(48), 12);        // node
+    };
+
+    /**
+     * Returns an unsigned x-bit random integer.
+     * @param {int} x A positive integer ranging from 0 to 53, inclusive.
+     * @returns {int} An unsigned x-bit random integer (0 <= f(x) < 2^x).
+     */
+    UUID._gri = function(x) { // _getRandomInt
+      if (x <   0) return NaN;
+      if (x <= 30) return (0 | Math.random() * (1 <<      x));
+      if (x <= 53) return (0 | Math.random() * (1 <<     30))
+                        + (0 | Math.random() * (1 << x - 30)) * (1 << 30);
+      return NaN;
+    };
+
+    /**
+     * Converts an integer to a zero-filled hexadecimal string.
+     * @param {int} num
+     * @param {int} length
+     * @returns {string}
+     */
+    UUID._ha = function(num, length) {  // _hexAligner
+      var str = num.toString(16), i = length - str.length, z = "0";
+      for (; i > 0; i >>>= 1, z += z) { if (i & 1) { str = z + str; } }
+      return str;
+    };
+
+
+    return UUID;
+  });
 define("oasis/version",
   [],
   function() {
@@ -1780,15 +1946,15 @@ define("oasis/version",
     return '0.4.0';
   });
 define("oasis/webworker_adapter",
-  ["oasis/util","oasis/shims","rsvp","oasis/logger","oasis/base_adapter"],
-  function(__dependency1__, __dependency2__, RSVP, Logger, BaseAdapter) {
+  ["oasis/util","oasis/shims","oasis/uuid","rsvp","oasis/logger","oasis/base_adapter"],
+  function(__dependency1__, __dependency2__, UUID, RSVP, Logger, BaseAdapter) {
     "use strict";
     var assert = __dependency1__.assert;
     var extend = __dependency1__.extend;
     var a_forEach = __dependency2__.a_forEach;
     var addEventListener = __dependency2__.addEventListener;
     var removeEventListener = __dependency2__.removeEventListener;
-    /*global self, postMessage, importScripts, UUID */
+    /*global self, postMessage, importScripts */
 
 
 
@@ -1875,4 +2041,119 @@ define("oasis/webworker_adapter",
 
 
     return WebworkerAdapter;
+  });
+define("oasis/xhr",
+  ["oasis/util","rsvp","exports"],
+  function(__dependency1__, RSVP, __exports__) {
+    "use strict";
+    var noop = __dependency1__.noop;
+    /*global XDomainRequest */
+
+
+    var a_slice = Array.prototype.slice;
+
+    function acceptsHeader(options) {
+      var dataType = options.dataType;
+
+      if (dataType && accepts[dataType]) {
+        return accepts[dataType];
+      }
+
+      return accepts['*'];
+    }
+
+    function xhrSetRequestHeader(xhr, options) {
+      xhr.setRequestHeader("Accepts", acceptsHeader(options));
+    }
+
+    function xhrGetLoadStatus(xhr) {
+      return xhr.status;
+    }
+
+    function xdrGetLoadStatus() {
+      return 200;
+    }
+
+    var NONE = {};
+
+    function trigger(event, oasis) {
+      if (!oasis) { return; }
+
+      var args = a_slice.call(arguments, 2);
+
+      args.unshift(event);
+      oasis.trigger.apply(oasis, args);
+    }
+
+    var accepts = {
+      "*": "*/*",
+      text: "text/plain",
+      html: "text/html",
+      xml: "application/xml, text/xml",
+      json: "application/json, text/javascript"
+    };
+
+    var XHR, setRequestHeader, getLoadStatus, send;
+
+    try {
+      if ('withCredentials' in new XMLHttpRequest()) {
+        XHR = XMLHttpRequest;
+        setRequestHeader = xhrSetRequestHeader;
+        getLoadStatus = xhrGetLoadStatus;
+      } else if (typeof XDomainRequest !== 'undefined') {
+        XHR = XDomainRequest;
+        setRequestHeader = noop;
+        getLoadStatus = xdrGetLoadStatus;
+      }
+    } catch( exception ) {
+      if (typeof XDomainRequest !== 'undefined') {
+        XHR = XDomainRequest;
+        setRequestHeader = noop;
+        getLoadStatus = xdrGetLoadStatus;
+      }
+    }
+    // else inline adapter with cross-domain cards is not going to work
+
+
+    function xhr(url, options, oasis) {
+      if (!oasis && this instanceof Oasis) { oasis = this; }
+      if (!options) { options = NONE; }
+
+      return new RSVP.Promise(function(resolve, reject){
+        var xhr = new XHR();
+        xhr.open("get", url, true);
+        setRequestHeader(xhr, options);
+
+        if (options.timeout) {
+          xhr.timeout = options.timeout;
+        }
+
+        xhr.onload = function () {
+          trigger('xhr.load', oasis, url, options, xhr);
+
+          var status = getLoadStatus(xhr);
+          if (status >= 200 && status < 300) {
+            resolve(xhr.responseText);
+          } else {
+            reject(xhr);
+          }
+        };
+
+        xhr.onprogress = noop;
+        xhr.ontimeout = function () {
+          trigger('xhr.timeout', oasis, url, options, xhr);
+          reject(xhr);
+        };
+
+        xhr.onerror = function () {
+          trigger('xhr.error', oasis, url, options, xhr);
+          reject(xhr);
+        };
+
+        trigger('xhr.send', oasis, url, options, xhr);
+        xhr.send();
+      });
+    }
+
+    __exports__.xhr = xhr;
   });

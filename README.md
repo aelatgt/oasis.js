@@ -193,6 +193,17 @@ additional handshaking phase.
 
 ## Create the Oasis Connection in the Sandbox
 
+> Currently, it seems that you need to specifically request
+> that your sandbox calls back into the Oasis runtime to make
+> the initial connection.  To do this, use the following code:
+
+```
+     oasis.autoInitializeSandbox(Oasis.adapters);
+```
+
+> I believe this should be automatic (based on the name), so
+> hopefully this requirement will go away.
+
 From within the sandbox, it is necessary to connect back to the same capability
 defined above.  Because this is an asynchronous operation, we use promises to obtain
 the actual connection (called a `port`).
@@ -211,6 +222,18 @@ rather than talking to a nested sandbox.
 Once both `connect` operations have completed and called into the callback functions,
 the connection will have been established and the communications can begin.
 
+## Logging
+
+As with all software, it will often be the case that things mysteriously do not work.
+
+In order to see into the mysteries of Oasis, it's best to turn on logging.  To do this,
+you need to call `enable()` on the `logger` object, an entry on the `oasis` object.
+
+```
+      oasis.logger.enable();
+```
+
+And logging can also be turned off by calling `disable()`.
 
 
 
