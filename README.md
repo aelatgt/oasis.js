@@ -235,95 +235,24 @@ you need to call `enable()` on the `logger` object, an entry on the `oasis` obje
 
 And logging can also be turned off by calling `disable()`.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Creating Sandboxes
-
-Sandboxed applications or widgets can be hosted as JavaScript or HTML.  Both can
-be sandboxed inside an iframe, but Oasis can also sandbox JavaScript widgets
-inside a web worker.
-
-Sandboxes are created via the `createSandbox` API.
-
-Here is an example of creating an iframe sandbox for a JavaScript widget:
-```js
-oasis.createSandbox({
-  url: 'http://example.com/profile_viewer.js',
-  capabilities: [ 'account' ]
-});
-```
-
-When creating JavaScript sandboxes it is necessary to host Oasis on the same
-domain as the sandboxed JavaScript (see [Browser Support](#requirements--browser-support)).
-
-Here is an example of creating an iframe sandbox for an HTML widget:
-```js
-oasis.createSandbox({
-  url: 'http://example.com/profile_viewer.html',
-  type: 'html',
-  capabilities: [ 'account' ]
-});
-```
-
-When creating HTML sandboxes, it is the sandbox's responsibility to load Oasis
-(typically via a script tag in the head element).
-
-Sandboxed widgets that require no UI can be loaded as web workers:
-```js
-  url: 'http://example.com/profile_information.js',
-  capabilities: [ 'account' ],
-  adapter: oasis.adapters.webworker
-```
-
-The application can grant specific privileges to the sandbox, like opening windows.
-
-```js
-oasis.createSandbox({
-  url: 'http://example.com/profile_viewer.html',
-  type: 'html',
-  capabilities: [ 'account' ],
-  sandbox: {
-    popups: true
-  }
-});
-```
-
-### Starting Sandboxes
-
-Web worker sandboxes will start immediately.  HTML (ie iframe) sandboxes will
-start as soon as their DOM element is placed in the document.  The simplest way
-to do this is to append them to the body:
-
-```js
-document.body.appendChild(sandbox.el);
-```
-
-But they can be placed anywhere in the DOM.  Please note that once in the DOM
-the sandboxes should not be moved: iframes moved within documents are reloaded
-by the browser.
-
 # API
+
+The main purpose of Oasis is to provide clear, easy to use communication
+semantics between logical sandboxes.
+
+It is irrelevant whether the sandboxes are iframe or webworker sandboxes, and
+it is also irrelevant who might be considered to be "initiating" the conversation
+and who would be thought of as "responding".
+
+There are three (or possibly four, depending on how you count) methods for
+communicating between sandboxes.  Which method is right for a given situation will
+depend on the nature of the communication.
+
+* Asynchronous messages using `send` and `on`
+* Request/Response using `request`, `onRequest` and promises
+* Using `Service`s and `Consumer`s
+  * Both asynchronous and Request/Response
+
 
 ## Connecting to Ports Directly
 
