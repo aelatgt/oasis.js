@@ -235,6 +235,25 @@ you need to call `enable()` on the `logger` object, an entry on the `oasis` obje
 
 And logging can also be turned off by calling `disable()`.
 
+## Wiretapping
+
+That's probably not enough though.  You will want to see the messages that are
+being sent back and forth, particularly when they disappear into the ether because
+you didn't correctly configure your listeners.
+
+You can add a "wiretap" that receives all the messages coming "from" a sandbox by
+adding a `wiretap` function:
+
+```
+      sandbox.wiretap(function(cap, obj) { console.log("wiretap: ", cap, obj); });
+```
+
+The `sandbox` here is the one returned by the call to `createSandbox` above.
+
+This call only needs to be made once, in the container.  Messages in both
+directions will be captured and the object identifies whether they are "sent"
+or "received" by the iframe.
+
 # API
 
 The main purpose of Oasis is to provide clear, easy to use communication
